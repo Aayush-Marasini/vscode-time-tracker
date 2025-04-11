@@ -1,4 +1,21 @@
-This is a vscode time tracker.
-this program tracks the time you spend in vscode and uploads the data into your google calender
-Enter your details into the "time-tracker-401501-39012fa9fee5.json" file and your email into "program.py" line 59 
-You need to set up your email and get api access 
+# ⏱️ VS Code Time Tracker
+
+Track how much time you spend coding in Visual Studio Code and automatically log it to your Google Calendar.
+
+---
+
+## 📦 Features
+
+- Tracks your active coding time
+- Automatically creates calendar events with duration
+- Uses Google Calendar API (OAuth 2.0)
+
+---
+
+## 🚀 How to Use
+
+### 1. Clone this repository
+
+```bash
+git clone https://github.com/Aayush-Marasini/vscode-time-tracker.git
+cd vscode-time-tracker
