@@ -1,6 +1,7 @@
 import logging
 import os
 import pickle
+import json
 import time
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
@@ -41,7 +42,7 @@ def authenticate():
 
 # Function to create a calendar event
 def create_event(service, event_title, event_duration):
-    # Calculate event end time based on duration
+    # Calculate event start and end times based on duration
     start_time = time.strftime('%Y-%m-%dT%H:%M:%S', time.gmtime())
     end_time = time.strftime('%Y-%m-%dT%H:%M:%S', time.gmtime(time.time() + event_duration * 60))
 
@@ -66,6 +67,27 @@ def create_event(service, event_title, event_duration):
         print(f"An error occurred: {error}")
 
 
+# Function to save unfinished events
+def save_unfinished_event(event_title, start_time, duration):
+    unfinished_event = {
+        'event_title': event_title,
+        'start_time': start_time,
+        'duration': duration,
+    }
+    with open('unfinished_events.json', 'w') as f:
+        json.dump(unfinished_event, f)
+    logging.info("Unfinished event saved.")
+
+
+# Function to load unfinished events
+def load_unfinished_event():
+    if os.path.exists('unfinished_events.json'):
+        with open('unfinished_events.json', 'r') as f:
+            unfinished_event = json.load(f)
+            return unfinished_event
+    return None
+
+
 # Main tracking logic
 def track_time():
     creds = authenticate()
@@ -76,13 +98,36 @@ def track_time():
         print(f"An error occurred: {error}")
         return
 
-    # Example: Track for 1 hour of coding time (this can be dynamically set)
-    event_title = "VS Code Work Session"
-    event_duration = 60  # in minutes
+    # Load unfinished event if available
+    unfinished_event = load_unfinished_event()
+    if unfinished_event:
+        print(f"Resuming unfinished event: {unfinished_event['event_title']}")
+        event_title = unfinished_event['event_title']
+        event_duration = unfinished_event['duration']
+    else:
+        # Prompt user for event title and duration if no unfinished event
+        event_title = input("Enter the event title (e.g., 'VS Code Work Session'): ")
+        event_duration = int(input("Enter the event duration in minutes: "))
 
-    create_event(service, event_title, event_duration)
+    # Track time dynamically
+    start_time = time.time()
+    print(f"Started tracking {event_title} at {time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(start_time))}")
+
+    # Wait for the duration specified by the user (simulating work session)
+    time.sleep(event_duration * 60)
+
+    end_time = time.time()
+    elapsed_time = (end_time - start_time) / 60  # Convert seconds to minutes
+
+    # If time is less than expected, save as unfinished
+    if elapsed_time < event_duration:
+        save_unfinished_event(event_title, start_time, event_duration - elapsed_time)
+        print(f"Unfinished work saved. You tracked {elapsed_time} minutes of {event_duration}.")
+    else:
+        create_event(service, event_title, event_duration)
 
 
 if __name__ == '__main__':
     track_time()
+
 
