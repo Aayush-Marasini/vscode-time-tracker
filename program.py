@@ -1,71 +1,88 @@
-import psutil
+import logging
+import os
+import pickle
 import time
-import datetime
-import win32gui
-from google.oauth2 import service_account
+from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 
-# Define the process name of VS Code
-vscode_process_name = "Code.exe"
+# Set up logging
+logging.basicConfig(filename='tracker.log', level=logging.INFO)
 
-# Initialize a variable to track if VS Code is currently open
-vscode_open = False
+# If modifying these SCOPES, delete the file token.pickle.
+SCOPES = ['https://www.googleapis.com/auth/calendar']
 
-# Load Google Calendar API credentials
-credentials = service_account.Credentials.from_service_account_file(r"time-tracker-401501-39012fa9fee5.json", scopes=['https://www.googleapis.com/auth/calendar'])
-
-
+# Set the credentials file path
+CREDENTIALS_FILE = 'time-tracker-401501-39012fa9fee5.json'
 
 
-# Create a Calendar service
-service = build('calendar', 'v3', credentials=credentials)
+# Function to authenticate with Google
+def authenticate():
+    creds = None
+    # The file token.pickle stores the user's access and refresh tokens.
+    # It is created automatically when the authorization flow completes for the first time.
+    if os.path.exists('token.pickle'):
+        with open('token.pickle', 'rb') as token:
+            creds = pickle.load(token)
 
-while True:
-    # Get a list of running processes
-    running_processes = psutil.process_iter(attrs=['pid', 'name'])
+    # If there are no (valid) credentials available, let the user log in.
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        else:
+            flow = InstalledAppFlow.from_client_secrets_file(CREDENTIALS_FILE, SCOPES)
+            creds = flow.run_local_server(port=0)
+        # Save the credentials for the next run
+        with open('token.pickle', 'wb') as token:
+            pickle.dump(creds, token)
+    
+    return creds
 
-    for process in running_processes:
-        if process.info['name'] == vscode_process_name:
-            # Check if VS Code is not already open
-            if not vscode_open:
-                # VS Code has been opened, record the timestamp
-                vs_code_start_time = datetime.datetime.now()
-                print(f"VS Code opened at {vs_code_start_time}")
-                vscode_open = True
-            break
-    else:
-        # If no VS Code process is found, reset the open flag
-        if vscode_open:
-            # VS Code was closed, calculate usage time
-            vs_code_end_time = datetime.datetime.now()
-            vs_code_usage_time = vs_code_end_time - vs_code_start_time
 
-            # Create a Google Calendar event for VS Code usage
-            event = {
-                'summary': 'VS Code Usage',
-                'description': 'Time spent on VS Code',
-                'start': {
-                    'dateTime': vs_code_start_time.isoformat(),
-                    'timeZone': 'Asia/Kathmandu',
-                },
-                'end': {
-                    'dateTime': vs_code_end_time.isoformat(),
-                    'timeZone': 'Asia/Kathmandu',
-                },
-            }
+# Function to create a calendar event
+def create_event(service, event_title, event_duration):
+    # Calculate event end time based on duration
+    start_time = time.strftime('%Y-%m-%dT%H:%M:%S', time.gmtime())
+    end_time = time.strftime('%Y-%m-%dT%H:%M:%S', time.gmtime(time.time() + event_duration * 60))
 
-            # Upload the event to Google Calendar
-            #Enter your email here in calendarId
-            service.events().insert(calendarId='', body=event).execute()
-            print(f"VS Code closed at {vs_code_end_time}, Time spent: {vs_code_usage_time}")
-            vscode_open = False
+    event = {
+        'summary': event_title,
+        'start': {
+            'dateTime': start_time,
+            'timeZone': 'UTC',
+        },
+        'end': {
+            'dateTime': end_time,
+            'timeZone': 'UTC',
+        },
+    }
 
-    # Check if VS Code is currently focused
-    hwnd = win32gui.GetForegroundWindow()
-    window_title = win32gui.GetWindowText(hwnd)
-    if "Visual Studio Code" in window_title:
-        vscode_open = True
-    else:
-        vscode_open = False
+    try:
+        event = service.events().insert(calendarId='primary', body=event).execute()
+        logging.info(f"Event created: {event.get('htmlLink')}")
+        print(f"Event created: {event.get('htmlLink')}")
+    except HttpError as error:
+        logging.error(f"An error occurred: {error}")
+        print(f"An error occurred: {error}")
 
-    time.sleep(1)  # Sleep for 1 second before checking again
+
+# Main tracking logic
+def track_time():
+    creds = authenticate()
+    try:
+        service = build('calendar', 'v3', credentials=creds)
+    except HttpError as error:
+        logging.error(f"An error occurred while creating the service: {error}")
+        print(f"An error occurred: {error}")
+        return
+
+    # Example: Track for 1 hour of coding time (this can be dynamically set)
+    event_title = "VS Code Work Session"
+    event_duration = 60  # in minutes
+
+    create_event(service, event_title, event_duration)
+
+
+if __name__ == '__main__':
+    track_time()
+
